@@ -477,24 +477,41 @@ class Word2Vec(utils.SaveLoad):
         self.scale_vocab(keep_raw_vocab)  # trim by min_count & precalculate downsampling
         self.finalize_vocab()  # build tables & arrays
 
-    def scan_vocab(self, sentences, progress_per=10000):
-        """Do an initial scan of all words appearing in sentences."""
-        logger.info("collecting all words and their counts")
-        sentence_no = -1
-        total_words = 0
-        min_reduce = 1
+    def vocab_chunk(self, sentences, temp_vocabs):
         vocab = defaultdict(int)
         for sentence_no, sentence in enumerate(sentences):
-            if sentence_no % progress_per == 0:
-                logger.info("PROGRESS: at sentence #%i, processed %i words, keeping %i word types",
-                            sentence_no, sum(itervalues(vocab)) + total_words, len(vocab))
             for word in sentence:
                 vocab[word] += 1
+        temp_vocabs.append(vocab)
 
-            if self.max_vocab_size and len(vocab) > self.max_vocab_size:
-                total_words += utils.prune_vocab(vocab, min_reduce)
-                min_reduce += 1
-
+    def scan_vocab(self, sentences, progress_per=10000):
+        """Do an initial scan of all words appearing in sentences."""
+        if self.max_vocab_size:
+            logger.warn('max_vocab_size is disabled in this fork of gensim, it will be ignored')
+        logger.info("collecting all words and their counts")
+        worker_lists = [[] for n in range(self.workers)]
+        worker = 0
+        sentence_no = -1
+        total_words = 0
+        vocab = defaultdict(int)
+        logging.info('populating worker lists')
+        for sentence_no, sentence in enumerate(sentences):
+            worker_lists[worker].append(sentence)
+            worker = worker+1 if worker < self.workers-1 else 0
+            sentence_no += 1
+        vocab_lists = []
+        vocab_threads = []
+        logging.info('starting vocab worker threads')
+        for worker_list in worker_lists:
+            t = threading.Thread(target=self.vocab_chunk, args=(worker_list, vocab_lists))
+            t.start()
+            vocab_threads.append(t)
+        for t in vocab_threads:
+            t.join()
+        logging.info('merging vocab counts')
+        for chunk in vocab_lists:
+            for word in chunk:
+                vocab[word] += chunk[word]
         total_words += sum(itervalues(vocab))
         logger.info("collected %i word types from a corpus of %i words and %i sentences",
                     len(vocab), total_words, sentence_no + 1)
@@ -1430,3 +1447,4 @@ if __name__ == "__main__":
         model.accuracy(sys.argv[2])
 
     logging.info("finished running %s" % program)
+
