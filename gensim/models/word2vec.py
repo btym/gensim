@@ -30,7 +30,7 @@ The model can also be instantiated from an existing file on disk in the word2vec
 
   >>> model = Word2Vec.load_word2vec_format('/tmp/vectors.txt', binary=False)  # C text format
   >>> model = Word2Vec.load_word2vec_format('/tmp/vectors.bin', binary=True)  # C binary format
-
+sentence
 You can perform various syntactic/semantic NLP word tasks with the model. Some of them
 are already built-in::
 
@@ -498,7 +498,6 @@ class Word2Vec(utils.SaveLoad):
         for sentence_no, sentence in enumerate(sentences):
             worker_lists[worker].append(sentence)
             worker = worker+1 if worker < self.workers-1 else 0
-            sentence_no += 1
         vocab_lists = []
         vocab_threads = []
         logging.info('starting vocab worker threads')
